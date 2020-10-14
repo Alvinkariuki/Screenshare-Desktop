@@ -1,6 +1,6 @@
 const { desktopCapturer, remote } = require("electron");
 const { Menu, dialog } = remote;
-const { writeFile } = require("fs");
+const { writeFile, truncate } = require("fs");
 
 // MediaRecorder instance to capture footage
 let mediaRecorder;
@@ -51,7 +51,7 @@ async function getVideoSources() {
 async function selectSource(source) {
   videoSelectBtn.innerHTML = source.name;
 
-  const constraints = {
+  const constraintsVideo = {
     audio: false,
 
     video: {
@@ -62,20 +62,34 @@ async function selectSource(source) {
     },
   };
 
-  // Create a stream
-  const stream = await navigator.mediaDevices.getUserMedia(constraints);
+  const constraintsAudio = {audio: true}
 
-  // Preview the source in a video element
-  videoElement.srcObject = stream;
-  videoElement.play();
+  try {
+       // Create audio and video streams seperately
+       const audioStream = await navigator.mediaDevices.getUserMedia(constraintsAudio);
+       const videoStream = await navigator.mediaDevices.getUserMedia(constraintsVideo);
 
-  // Create the media recorder
-  const options = { mimeType: "video/webm; codecs=vp9" };
-  mediaRecorder = new MediaRecorder(stream, options);
+       // combine the streams
+       const audioVideoStream = new MediaStream([...videoStream.getVideoTracks(), ...audioStream.getAudioTracks()])
 
-  // Register Event handlers
-  mediaRecorder.ondataavailable = handleDataAvailable;
-  mediaRecorder.onstop = handleStop;
+      // Preview the source in a video element
+      videoElement.srcObject = audioVideoStream;
+      
+      // Remove the echoing effect of the audio 
+      videoElement.muted = true;
+      videoElement.play();
+
+      // Create the media recorder
+      const options = { mimeType: "video/webm; codecs=vp9" };
+      mediaRecorder = new MediaRecorder(audioVideoStream, options);
+
+      // Register Event handlers
+      mediaRecorder.ondataavailable = handleDataAvailable;
+      mediaRecorder.onstop = handleStop;
+  }catch (err) {
+    console.log(err)
+  }
+  
 }
 
 function handleDataAvailable(e) {
